@@ -1,22 +1,29 @@
-extern crate toml;
 extern crate clap;
+extern crate toml;
 
+use clap::{App, Arg};
 use std::env;
-use std::io::prelude::*;
 use std::ffi::OsStr;
 use std::fs::File;
-use toml::Value as Toml;
+use std::io::prelude::*;
 use std::process::Command;
-use clap::{App, Arg};
+use toml::Value as Toml;
 
 fn main() {
-
     let matched_args = App::new("cargo build-deps")
         .arg(Arg::with_name("build-deps"))
         .arg(Arg::with_name("release").long("release"))
         .arg(Arg::with_name("frozen").long("frozen"))
-        .arg(Arg::with_name("manifest-path").long("manifest-path").takes_value(true))
-        .arg(Arg::with_name("target-dir").long("target-dir").takes_value(true))
+        .arg(
+            Arg::with_name("manifest-path")
+                .long("manifest-path")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("target-dir")
+                .long("target-dir")
+                .takes_value(true),
+        )
         .arg(Arg::with_name("bin").long("bin").takes_value(true))
         .arg(Arg::with_name("lib").long("lib").takes_value(true))
         .arg(Arg::with_name("target").long("target").takes_value(true))
@@ -62,17 +69,13 @@ fn get_toml(file_path: &str) -> Toml {
 
 fn parse_package_name(toml: &Toml) -> &str {
     match toml {
-        &Toml::Table(ref table) => {
-            match table.get("package") {
-                Some(&Toml::Table(ref table)) => {
-                    match table.get("name") {
-                        Some(&Toml::String(ref name)) => name,
-                        _ => panic!("failed to parse name"),
-                    }
-                }
-                _ => panic!("failed to parse package"),
-            }
-        }
+        &Toml::Table(ref table) => match table.get("package") {
+            Some(&Toml::Table(ref table)) => match table.get("name") {
+                Some(&Toml::String(ref name)) => name,
+                _ => panic!("failed to parse name"),
+            },
+            _ => panic!("failed to parse package"),
+        },
         _ => panic!("failed to parse Cargo.toml: incorrect format"),
     }
 }
@@ -80,28 +83,30 @@ fn parse_package_name(toml: &Toml) -> &str {
 fn parse_deps<'a>(toml: &'a Toml, top_pkg_name: &str) -> Vec<String> {
     match toml.get("package") {
         Some(&Toml::Array(ref pkgs)) => {
-            let top_pkg = pkgs.iter()
+            let top_pkg = pkgs
+                .iter()
                 .find(|pkg| pkg.get("name").unwrap().as_str().unwrap() == top_pkg_name);
             match top_pkg {
-                Some(&Toml::Table(ref pkg)) => {
-                    match pkg.get("dependencies") {
-                        Some(&Toml::Array(ref deps_toml_array)) => {
-                            deps_toml_array.iter()
-                                .map(|value| {
-                                    let mut value_parts = value.as_str().unwrap().split(" ");
-                                    format!("{}:{}",
-                                            value_parts.next()
-                                                .expect("failed to parse name from depencency \
-                                                         string"),
-                                            value_parts.next()
-                                                .expect("failed to parse version from depencency \
-                                                         string"))
-                                })
-                                .collect()
-                        }
-                        _ => panic!("error parsing dependencies table"),
-                    }
-                }
+                Some(&Toml::Table(ref pkg)) => match pkg.get("dependencies") {
+                    Some(&Toml::Array(ref deps_toml_array)) => deps_toml_array
+                        .iter()
+                        .map(|value| {
+                            let mut value_parts = value.as_str().unwrap().split(" ");
+                            format!(
+                                "{}:{}",
+                                value_parts.next().expect(
+                                    "failed to parse name from depencency \
+                                     string"
+                                ),
+                                value_parts.next().expect(
+                                    "failed to parse version from depencency \
+                                     string"
+                                )
+                            )
+                        })
+                        .collect(),
+                    _ => panic!("error parsing dependencies table"),
+                },
                 _ => panic!("failed to find top package"),
             }
         }
@@ -118,13 +123,20 @@ where
 
     let mut command = Command::new("cargo");
 
-    let command_with_args = command.arg("build").arg("--package").arg(pkg_name).args(args);
+    let command_with_args = command
+        .arg("build")
+        .arg("--package")
+        .arg(pkg_name)
+        .args(args);
 
     execute_command(command_with_args);
 }
 
 fn execute_command(command: &mut Command) {
-    let mut child = command.envs(env::vars()).spawn().expect("failed to execute process");
+    let mut child = command
+        .envs(env::vars())
+        .spawn()
+        .expect("failed to execute process");
 
     let exit_status = child.wait().expect("failed to run command");
 
