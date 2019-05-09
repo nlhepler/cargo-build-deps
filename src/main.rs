@@ -3,6 +3,7 @@ extern crate clap;
 
 use std::env;
 use std::io::prelude::*;
+use std::ffi::OsStr;
 use std::fs::File;
 use toml::Value as Toml;
 use std::process::Command;
@@ -13,11 +14,29 @@ fn main() {
     let matched_args = App::new("cargo build-deps")
         .arg(Arg::with_name("build-deps"))
         .arg(Arg::with_name("release").long("release"))
+        .arg(Arg::with_name("frozen").long("frozen"))
+        .arg(Arg::with_name("manifest-path").long("manifest-path").takes_value(true))
+        .arg(Arg::with_name("target-dir").long("target-dir").takes_value(true))
+        .arg(Arg::with_name("bin").long("bin").takes_value(true))
+        .arg(Arg::with_name("lib").long("lib").takes_value(true))
+        .arg(Arg::with_name("target").long("target").takes_value(true))
         .get_matches();
 
-    let is_release = matched_args.is_present("release");
-
-    execute_command(Command::new("cargo").arg("update"));
+    let build_args = {
+        let mut args = vec![];
+        for arg in &["release", "frozen"] {
+            if matched_args.is_present(arg) {
+                args.push(format!("--{}", arg).into());
+            }
+        }
+        for arg in &["manifest-path", "target-dir", "bin", "lib", "target"] {
+            if matched_args.is_present(arg) {
+                args.push(format!("--{}", arg).into());
+                args.push(matched_args.value_of_os(arg).unwrap().to_os_string());
+            }
+        }
+        args
+    };
 
     let cargo_toml = get_toml("Cargo.toml");
     let top_pkg_name = parse_package_name(&cargo_toml);
@@ -28,7 +47,7 @@ fn main() {
     println!("building packages: {:?}", deps);
 
     for dep in deps {
-        build_package(&dep, is_release);
+        build_package(&dep, &build_args);
     }
 
     println!("done");
@@ -90,20 +109,18 @@ fn parse_deps<'a>(toml: &'a Toml, top_pkg_name: &str) -> Vec<String> {
     }
 }
 
-fn build_package(pkg_name: &str, is_release: bool) {
+fn build_package<I, S>(pkg_name: &str, args: I)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     println!("building package: {:?}", pkg_name);
 
     let mut command = Command::new("cargo");
 
-    let command_with_args = command.arg("build").arg("-p").arg(pkg_name);
+    let command_with_args = command.arg("build").arg("--package").arg(pkg_name).args(args);
 
-    let command_with_args_2 = if is_release {
-        command_with_args.arg("--release")
-    } else {
-        command_with_args
-    };
-
-    execute_command(command_with_args_2);
+    execute_command(command_with_args);
 }
 
 fn execute_command(command: &mut Command) {
